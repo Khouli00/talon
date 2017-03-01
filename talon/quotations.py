@@ -125,6 +125,8 @@ RE_ORIGINAL_MESSAGE = re.compile(u'[\s]*[-]+[ ]*({})[ ]*[-]+'.format(
     u'|'.join((
         # English
         'Original Message', 'Reply Message',
+        # French
+        "Message d'origine"
         # German
         u'Ursprüngliche Nachricht', 'Antwort Nachricht',
         # Danish
@@ -134,7 +136,7 @@ RE_ORIGINAL_MESSAGE = re.compile(u'[\s]*[-]+[ ]*({})[ ]*[-]+'.format(
 RE_FROM_COLON_OR_DATE_COLON = re.compile(u'(_+\r?\n)?[\s]*(:?[*]?{})[\s]?:[*]?.*'.format(
     u'|'.join((
         # "From" in different languages.
-        'From', 'Van', 'De', 'Von', 'Fra', u'Från',
+        'From','\*\*From', 'Van', 'De','\*\*De',' De', 'Von', 'Fra', u'Från',
         # "Date" in different languages.
         'Date', 'Datum', u'Envoyé', 'Skickat', 'Sendt',
     ))), re.I)
@@ -374,6 +376,25 @@ def extract_from_plain(msg_body):
     msg_body = postprocess(msg_body)
     return msg_body
 
+def extract_from_plain_debug(msg_body):
+    """DEBUG : Extracts a non quoted message from provided plain text."""
+    stripped_text = msg_body
+
+    delimiter = get_delimiter(msg_body)
+    msg_body = preprocess(msg_body, delimiter)
+    # don't process too long messages
+    lines = msg_body.splitlines()[:MAX_LINES_COUNT]
+    markers = mark_message_lines(lines)
+    lines = process_marked_lines(lines, markers)
+
+    # concatenate lines, change links back, strip and return
+    msg_body = delimiter.join(lines)
+    msg_body = postprocess(msg_body)
+    data= (markers,msg_body)
+    for marker,line in zip(data[0],data[1].split('\n')):
+        print(marker,line)
+
+
 
 def extract_from_html(msg_body):
     """
@@ -571,7 +592,7 @@ def is_splitter(line):
     None otherwise.
     '''
     for pattern in SPLITTER_PATTERNS:
-        matcher = re.match(pattern, line)
+        matcher = re.search(pattern, line)
         if matcher:
             return matcher
 
