@@ -22,16 +22,19 @@ import six
 log = logging.getLogger(__name__)
 
 
-RE_FWD = re.compile("^[-]+[ ]*Forwarded message[ ]*[-]+$", re.I | re.M)
+
+RE_FWD = re.compile("[-]+[ ]*((Forwarded message)|(Message transfere))[ ]*[-]+$", re.I | re.M)
 
 RE_ON_DATE_SMB_WROTE = re.compile(
-    u'(-*[>]?[ ]?({0})[ ].*({1})(.*\n){{0,2}}.*({2}):?-*)'.format(
+    u'(-*[>]?[ ]?({0})[ ].*({1})(.*\n){{0,2}}.*({2}) ?:?-*)'.format(
         # Beginning of the line
         u'|'.join((
             # English
             'On',
             # French
             'Le',
+            # Italian,
+            'Il',
             # Polish
             'W dniu',
             # Dutch
@@ -55,7 +58,9 @@ RE_ON_DATE_SMB_WROTE = re.compile(
             # English
             'wrote', 'sent',
             # French
-            u'a écrit',
+            u'a ecrit',
+            # Italian
+            'ha scritto:',
             # Polish
             u'napisał',
             # Dutch
@@ -126,7 +131,8 @@ RE_ORIGINAL_MESSAGE = re.compile(u'[\s]*[-]+[ ]*({})[ ]*[-]+'.format(
         # English
         'Original Message', 'Reply Message',
         # French
-        "Message d'origine"
+        "Message d'origine",
+        "E-mail d'origine",
         # German
         u'Ursprüngliche Nachricht', 'Antwort Nachricht',
         # Danish
@@ -136,9 +142,9 @@ RE_ORIGINAL_MESSAGE = re.compile(u'[\s]*[-]+[ ]*({})[ ]*[-]+'.format(
 RE_FROM_COLON_OR_DATE_COLON = re.compile(u'(_+\r?\n)?[\s]*(:?[*]?{})[\s]?:[*]?.*'.format(
     u'|'.join((
         # "From" in different languages.
-        'From','\*\*From', 'Van', 'De','\*\*De',' De', 'Von', 'Fra', u'Från',
+        'From','\*\*From', 'Van', 'De','\*\*De',' De', 'Da','Von', 'Fra', u'Från',
         # "Date" in different languages.
-        'Date', 'Datum', u'Envoyé', 'Skickat', 'Sendt',
+        'Date', 'Datum', u'Envoye', 'Skickat', 'Sendt',
     ))), re.I)
 
 SPLITTER_PATTERNS = [
@@ -156,7 +162,9 @@ SPLITTER_PATTERNS = [
     re.compile('\S{3,10}, \d\d? \S{3,10} 20\d\d,? \d\d?:\d\d(:\d\d)?'
                '( \S+){3,6}@\S+:'),
     # Sent from Samsung MobileName <address@example.com> wrote:
-    re.compile('Sent from Samsung .*@.*> wrote')
+    re.compile('Sent from Samsung .*@.*> wrote'),
+    # converted to plain '*******' or '===='
+    re.compile('^((\*|\=) ?){4,}$')
     ]
 
 
@@ -362,7 +370,6 @@ def postprocess(msg_body):
 
 def extract_from_plain(msg_body):
     """Extracts a non quoted message from provided plain text."""
-    stripped_text = msg_body
 
     delimiter = get_delimiter(msg_body)
     msg_body = preprocess(msg_body, delimiter)
@@ -378,7 +385,6 @@ def extract_from_plain(msg_body):
 
 def extract_from_plain_debug(msg_body):
     """DEBUG : Extracts a non quoted message from provided plain text."""
-    stripped_text = msg_body
 
     delimiter = get_delimiter(msg_body)
     msg_body = preprocess(msg_body, delimiter)

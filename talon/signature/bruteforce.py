@@ -6,6 +6,7 @@ import regex as re
 from talon.utils import get_delimiter
 from talon.signature.constants import (SIGNATURE_MAX_LINES,
                                        TOO_LONG_SIGNATURE_LINE)
+import unicodedata
 
 log = logging.getLogger(__name__)
 
@@ -18,9 +19,20 @@ RE_SIGNATURE = re.compile(r'''
                        |
                        ^thanks[\s,!]*$
                        |
+                       ^ ?[Mm]erci[\s,!]*$
+                       |
                        ^regards[\s,!]*$
                        |
+                       |
+                       ^Cdlt[\s,!]*$
+                       |
+                       ^cdt[\s,!]*$
+                       |
+                       ^ ?(\w+ )?[cC]ordialement[\s,!]*$
+                       |
                        ^cheers[\s,!]*$
+                       |
+                       ^ ?[mM]erci[\s,!]*$
                        |
                        ^best[ a-z]*[\s,!]*$
                    )
@@ -34,6 +46,8 @@ RE_PHONE_SIGNATURE = re.compile(r'''
                (
                    (?:
                        ^sent[ ]{1}from[ ]{1}my[\s,!\w]*$
+                       |
+                       ^envoyé[ ]{1}de[ ]{1}mon[\s,!\w]*$
                        |
                        ^sent[ ]from[ ]Mailbox[ ]for[ ]iPhone.*$
                        |
@@ -63,7 +77,7 @@ RE_SIGNATURE_CANDIDATE = re.compile(r'''
 ''', re.I | re.X | re.M | re.S)
 
 
-def extract_signature(msg_body):
+def extract_signature(msg):
     '''
     Analyzes message for a presence of signature block (by common patterns)
     and returns tuple with two elements: message text without signature block
@@ -75,46 +89,43 @@ def extract_signature(msg_body):
     >>> extract_signature('Hey man!')
     ('Hey man!', None)
     '''
-    try:
-        # identify line delimiter first
-        delimiter = get_delimiter(msg_body)
+    msg_body =unicodedata.normalize('NFKD', msg)
+    # identify line delimiter first
+    delimiter = get_delimiter(msg_body)
 
-        # make an assumption
-        stripped_body = msg_body.strip()
-        phone_signature = None
+    # make an assumption
+    stripped_body = msg_body.strip()
+    phone_signature = None
 
-        # strip off phone signature
-        phone_signature = RE_PHONE_SIGNATURE.search(msg_body)
+    # strip off phone signature
+    phone_signature = RE_PHONE_SIGNATURE.search(msg_body)
+    if phone_signature:
+        stripped_body = stripped_body[:phone_signature.start()]
+        phone_signature = phone_signature.group()
+
+    # decide on signature candidate
+    lines = stripped_body.splitlines()
+    candidate = get_signature_candidate(lines)
+    candidate = delimiter.join(candidate)
+
+    # try to extract signature
+    signature = RE_SIGNATURE.search(candidate)
+    if not signature:
+        return (stripped_body.strip(), phone_signature)
+    else:
+        signature = signature.group()
+        # when we splitlines() and then join them
+        # we can lose a new line at the end
+        # we did it when identifying a candidate
+        # so we had to do it for stripped_body now
+        stripped_body = delimiter.join(lines)
+        stripped_body = stripped_body[:-len(signature)]
+
         if phone_signature:
-            stripped_body = stripped_body[:phone_signature.start()]
-            phone_signature = phone_signature.group()
+            signature = delimiter.join([signature, phone_signature])
 
-        # decide on signature candidate
-        lines = stripped_body.splitlines()
-        candidate = get_signature_candidate(lines)
-        candidate = delimiter.join(candidate)
-
-        # try to extract signature
-        signature = RE_SIGNATURE.search(candidate)
-        if not signature:
-            return (stripped_body.strip(), phone_signature)
-        else:
-            signature = signature.group()
-            # when we splitlines() and then join them
-            # we can lose a new line at the end
-            # we did it when identifying a candidate
-            # so we had to do it for stripped_body now
-            stripped_body = delimiter.join(lines)
-            stripped_body = stripped_body[:-len(signature)]
-
-            if phone_signature:
-                signature = delimiter.join([signature, phone_signature])
-
-            return (stripped_body.strip(),
-                    signature.strip())
-    except Exception as e:
-        log.exception('ERROR extracting signature')
-        return (msg_body, None)
+        return (stripped_body.strip(),
+                signature.strip())
 
 
 def get_signature_candidate(lines):
@@ -163,8 +174,8 @@ def _mark_candidate_indexes(lines, candidate):
     'cdc'
     """
     # at first consider everything to be potential signature lines
-    markers = bytearray('c'*len(candidate))
-
+    #markers = bytearray('c'*len(candidate),'utf-8')
+    markers = ['c' for elt in candidate]
     # mark lines starting from bottom up
     for i, line_idx in reversed(list(enumerate(candidate))):
         if len(lines[line_idx].strip()) > TOO_LONG_SIGNATURE_LINE:
@@ -174,7 +185,7 @@ def _mark_candidate_indexes(lines, candidate):
             if line.startswith('-') and line.strip("-"):
                 markers[i] = 'd'
 
-    return markers
+    return ''.join(markers)
 
 
 def _process_marked_candidate_indexes(candidate, markers):
